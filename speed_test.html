@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+    <head>
+    </head>
+    <body>
+	<script>
+	 /* Conclusion: using a length variable is no faster than accessing the length attribute of an array
+	  * Conslusion: using literals is about 7 times faster than accessing a class->member_array->member_of_class
+	  * 
+	  */
+	 function A(x, y, val) {
+	     this.x = x;
+	     this.y = y;
+	     this.val = 1;
+	 }
+	 function Father() {
+	     this.As = [];
+	     for(var i = 0; i < 1000000; i++)
+		 this.As.push(
+		     new A(Math.random(),
+			   Math.random(),
+			   Math.floor(Math.random() * 100)
+		     ));
+	     console.log("about to start test");
+	     this.test();
+	     console.log("Done.");
+	 }
+	 Father.prototype.test = function() {
+	     var start, end;
+	     start = Date.now();
+	     var sum0 = 0;
+	     for(var j = 0; j < 1000; j++) {
+		 for(var i = 0; i < this.As.length; i++) {
+		     sum0 += 5 / 2;
+		 }
+	     }
+	     console.log("sum0 = " + sum0);
+	     console.log("Millis: " + (Date.now() - start));
+	     start = Date.now();
+	     var len = this.As.length;
+	     var sum1 = 0;
+	     for(var j = 0; j < 1000; j++) {
+		 for(var i = 0; i < this.As.length; i++) {
+		     sum1 += 2.5;
+		 }
+	     }
+	     console.log("sum1 = " + sum1);
+	     console.log("Millis: " + (Date.now() - start));
+	 }
+	 new Father();
+	</script>
+    </body>
+</html>

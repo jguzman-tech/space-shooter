@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html>
+    <head>
+	<meta charset="UTF-8">
+	<title>2D Shooter</title>
+	<link href="/../style0.css" type="text/css" rel="stylesheet">
+    </head>
+    <body>
+	<header>
+	    <nav>
+		<a href="/../calculator.php">Use My Calculator</a>
+		<a href="/../chess-login.php">Play Chess Online</a>
+		<a href="/../info.php">More Info</a>
+		<a href="/../index.php">Home</a>
+	    </nav>
+	</header>
+	<h1>Use WASD to move and ENTER to fire.</h1>
+	<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
+	<canvas id="canvas" width="800" height="600" style="background-color:rgb(0, 0, 0)"></canvas>
+	<script>
+	 // Class-Functions: CamelCase
+	 // Methods/Functions: camelCase
+	 // Fields: snake_case
+	 /* TODO: You need relative touch movements to get this working on mobile.
+	  */
+	 function Ship() { // the player
+	     this.x = 400 - 25;
+	     this.y = 540; // the top of the player's hit box is 540
+	     this.v_x = 0;
+	     this.v_y = 0;
+	     this.width = 50;
+	     this.height = 50;
+	 }
+	 function Rocket(x, y) { // the player's rockets
+	     this.x = x;
+	     this.y = y;
+	     this.width = 10;
+	     this.height = 13;
+	 }
+	 function Alien(x, y, points, vs) { // main enemy, looks like manta ray
+	     x += 25;
+	     this.x = x; // x and y are used for drawing coordinates
+	     this.y = y;
+	     this.width = 50;
+	     this.height = 50;
+	     this.swim_frame = 0; // determines the ray picture we use
+	     this.angle; // orientation of the Alien
+	     this.x0 = x - 25; // x0 x1 y0 y1 are used for hit boxes
+	     this.x1 = x + 25;
+	     this.y0 = y - 25;
+	     this.y1 = y + 25;
+	     // states:
+	     // 0 - scripted movement, after reaching last point will transition to 1 unconditionally
+	     // 1 - slowly aim at player (losing momentum, cannot transition with momentum)
+	     // 2 - dash in that direction transition to 0 if the player dodges
+	     this.dest_points = points; // points for state 0
+	     this.dest_vs = vs; // velocity for point transitions, v_x and v_y will be calculated when necessary
+	     this.state = 0; // 0 - scripted move, 1 - aim at player, 2 - dash in that direction
+	     this.v_x = 0;
+	     this.v_y = 0;
+	     this.acceleration = 0.03;
+	     this.dash_angle = 0;
+	     this.dash_x = 0;
+	     this.dash_y = 0;
+	     this.dash_frames = 0; // how long in frames we have been dashing
+	 }
+	 function Explosion(x, y, angle, frames) { // show up when an Alien is destroyed
+	     this.x = x;
+	     this.y = y;
+	     this.angle = angle;
+	     this.frames = frames;
+	     this.width;
+	     this.height;
+	 }
+	 const sleep = (milliseconds) => { // taken from: https://flaviocopes.com/javascript-sleep/
+	     return new Promise(resolve => setTimeout(resolve, milliseconds))
+	 }
+	 Game.prototype.restockEnemies = function() {
+	     while(this.aliens.length < this.enemy_count) {
+		 var x, y, pi_mul;
+		 x = Math.random() * 725 + 25;
+		 pi_mul = Math.random() * 8;
+		 this.aliens.push(new Alien(x, -50, pi_mul * Math.PI/8));
+		 // this.aliens.push(new Alien(x, y, 3 * Math.PI/8));
+	     }
+	 }
+	 Game.prototype.addEnemy = function() {
+	     var x, y, pi_mul;
+	     x = Math.random() * 725 + 25;
+	     pi_mul = Math.random() * 8;
+	     this.aliens.push(new Alien(x, -50, pi_mul * Math.PI/8));
+	 }
+	 Game.prototype.calcAlienToShipTheta = function(ndx) { // calculates the angle between an alien and the player
+	     var opp, adj;
+	     opp = (this.ship.y + 0.5 * this.ship.height) - (this.aliens[ndx].y1 - this.aliens[ndx].width * 0.5);
+	     adj = (this.ship.x + this.ship.width * 0.5) - (this.aliens[ndx].x0 + this.aliens[ndx].width * 0.5);
+	     var theta =  Math.abs(Math.atan(opp / adj) + 0.5 * Math.PI);
+	     if(adj < 0) { // adjusts angle remember that atan only gives unique values between -0.5*PI and 0.5*PI
+		 theta += Math.PI;
+	     }
+	     return theta;
+	 }
+	 Game.prototype.calcTheta = function(x0, y0, x1, y1) {
+	     var opp, adj;
+	     opp = y1 - y0;
+	     adj = x1 - x0;
+	     var theta =  Math.abs(Math.atan(opp / adj) + 0.5 * Math.PI);
+	     if(adj < 0) { // adjusts angle remember that atan only gives unique values between -0.5*PI and 0.5*PI
+		 theta += Math.PI;
+	     }
+	     return theta;
+	 }
+	 Game.prototype.reinit = function() {
+	     this.frame_number = 0;
+	     this.rockets = [];
+	     this.aliens = [];
+	     this.explosions = [];
+	     this.game_over = false;
+	     this.ship.x = 375;
+	     this.ship.y = 540;
+	     this.ship.v_x = 0;
+	     this.ship.v_y = 0;
+	     this.kill_count = 0;
+	     this.spawnWave(0);
+	 }
+	 /* 
+	  * There is currently only one kind of wave
+	  * 
+	  */
+	 Game.prototype.spawnWave = function(type) { // creates a wave of enemies
+	     if(type == 0) {
+		 var x = Math.floor(Math.random() * 750);
+		 for(var i = 0; i < 16; i++) {
+		     var y = -50 * i;
+		     var points = [];
+		     var vs = [];
+		     points.push([x, i * 25 + 50]);
+		     vs.push(3);
+		     if(i % 2 == 0) {
+			 points.push([700, i * 25 + 50]);
+		     }
+		     else {
+			 points.push([100, i * 25 + 50]);
+		     }
+		     vs.push(3);
+		     this.aliens.push(new Alien(x, y, points, vs));
+		 }
+	     }
+	 }
+	 Game.prototype.redraw = function() { // called 100 times a second, draws a "frame"
+	     var i, j;
+	     this.frame_number++; // there are 100 frames a second, the frame_number can act as a "game clock"
+	     if(this.game_over)
+		 return;
+	     var interval = Math.floor(650 - Math.round(this.frame_number / 8.0));
+	     console.log("interval = " + interval);
+	     if(this.frame_number % interval == 0) {
+		 this.spawnWave(0);
+	     }
+	     this.context.clearRect(0, 0, 800, 600);
+	     this.ship.x += this.ship.v_x;
+	     this.ship.y += this.ship.v_y;
+	     if(this.ship.x < 0) {
+		 this.ship.x = 0;
+	     }
+	     else if(this.ship.x > 750) {
+		 this.ship.x = 750;
+	     }
+	     if(this.ship.y < 0) {
+		 this.ship.y = 0;
+	     }
+	     else if(this.ship.y > 550) {
+		 this.ship.y = 550;
+	     }
+	     /* // draw grid
+		this.context.strokeStyle = "#00FF00"
+		this.context.beginPath();
+		for(i = 50; i < 800; i += 50) {
+		// vertical lines, x = i
+		this.context.moveTo(i, 0);
+		this.context.lineTo(i, 600);
+		}
+		for(j = 50; j < 600; j += 50) {
+		// horizontal lines, y = j
+		this.context.moveTo(0, j);
+		this.context.lineTo(800, j);
+		}
+		this.context.stroke();
+		this.context.stroke(); */
+	     
+	     // this.context.moveTo(0, 0);
+	     // check if a rocket has hit an alien
+	     // this must adapt to the alien's angle
+	     for(i = 0; i < this.rockets.length; i++) {
+		 for(j = 0; j < this.aliens.length; j++) {
+		     if(i >= this.rockets.length) { // we alter rockets so we need to be safe
+			 break;
+		     }
+		     if(this.rockets[i].y < this.aliens[j].y1 &&
+			this.aliens[j].y1 - this.rockets[i].y <= this.aliens[j].height) {
+			 var x = this.rockets[i].x;
+			 var width = this.rockets[i].width;
+			 if(this.aliens[j].x0 <= x + width && x <= this.aliens[j].x1 + width) {
+			     // our rocket has hit!
+			     this.explosions.push(new Explosion(this.aliens[j].x, this.aliens[j].y, this.aliens[j].angle, 50));
+			     this.rockets.splice(i, 1);
+			     this.aliens.splice(j, 1);
+			     this.kill_count++;
+			 }
+		     }
+		 }
+	     }
+	     // check if an alien has rammed the player
+	     for(i = 0; i < this.aliens.length; i++) {
+		 var diff0 = this.aliens[i].y0 - this.ship.y;
+		 var diff1 = this.aliens[i].y1 - this.ship.y;
+		 if((diff0 >= 0 && diff0 <= this.ship.height) || (diff1 >= 0 && diff1 <= this.ship.height)) {
+		     var x0 = this.aliens[i].x0, x1 = this.aliens[i].x1;
+		     if(this.ship.x - x0 <= 50  && x0 - this.ship.x <= 50) {
+			 console.log("ship: x = " + this.ship.x + ", y = " + this.ship.y);
+			 console.log(this.aliens[i]);
+			 this.game_over = true;
+			 var text = "YOU KILLED " + this.kill_count + " MANTA RAYS, RESTARTING...";
+			 this.context.fillStyle = "red";
+			 this.context.font = "20px Monospace";
+			 this.context.textAlign = "center";
+			 this.context.fillText(text, 400, 100);
+			 this.context.fillText(text, 400, 300);
+			 this.context.fillText(text, 400, 500);
+			 sleep(3000).then(() => {
+			     this.reinit();
+			 });
+		     }
+		 }
+		 if(this.aliens[i].state == 0) {
+		     if(this.aliens[i].dest_points.length < 1) {
+			 this.aliens[i].state = 1;
+			 continue;
+		     }
+		     var v_x, v_y, theta;
+		     var x1, y1;
+		     var tolerance = 5;
+		     x1 = this.aliens[i].dest_points[0][0];
+		     y1 = this.aliens[i].dest_points[0][1];
+		     if((this.aliens[i].x0 - tolerance < x1 && this.aliens[i].x0 + tolerance > x1) &&
+			(this.aliens[i].y1 - tolerance < y1 && this.aliens[i].y1 + tolerance > y1)) { // if we are close enough then move on to the next point
+			 this.aliens[i].dest_points.splice(0, 1);
+			 this.aliens[i].dest_vs.splice(0, 1);
+			 continue;
+		     }
+		     theta = this.calcTheta(this.aliens[i].x0, this.aliens[i].y1, x1, y1);
+		     this.aliens[i].angle = theta; // manta rays should always look in the direction of movement
+		     v_x = this.aliens[i].dest_vs[0] * Math.cos(theta - 0.5 * Math.PI);
+		     v_y = this.aliens[i].dest_vs[0] * Math.sin(theta - 0.5 * Math.PI);
+		     // points will not lead out of bounds, bounds checks will not be done for now
+		     this.aliens[i].x += v_x;
+		     this.aliens[i].x0 += v_x;
+		     this.aliens[i].x1 += v_x;
+		     this.aliens[i].y += v_y;
+		     this.aliens[i].y0 += v_y;
+		     this.aliens[i].y1 += v_y;
+		 }
+		 else {
+		     if((this.aliens[i].v_y > 0 && this.aliens[i].y1 <= 650) ||
+			(this.aliens[i].v_y < 0 && this.aliens[i].y0 >= -50)) {
+			 this.aliens[i].y += this.aliens[i].v_y;
+			 this.aliens[i].y0 += this.aliens[i].v_y;
+			 this.aliens[i].y1 += this.aliens[i].v_y;
+		     }
+		     if((this.aliens[i].v_x > 0 && this.aliens[i].x1 <= 850) ||
+			(this.aliens[i].v_x < 0 && this.aliens[i].x0 >= -50)) {
+			 this.aliens[i].x += this.aliens[i].v_x;
+			 this.aliens[i].x0 += this.aliens[i].v_x;
+			 this.aliens[i].x1 += this.aliens[i].v_x;
+		     }
+		 }
+	     }
+	     this.context.drawImage(this.ship_imgs[Math.floor(Math.random() * 7)], this.ship.x, this.ship.y); // draw player
+	     // this.context.drawImage(this.ship_img, this.ship.x, this.ship.y);
+	     this.context.strokeStyle = "#0000FF";
+	     this.context.beginPath();
+	     this.context.moveTo(this.ship.x, this.ship.y);
+	     this.context.lineTo(this.ship.x + this.ship.width, this.ship.y);
+	     this.context.lineTo(this.ship.x + this.ship.width, this.ship.y + this.ship.height);
+	     this.context.lineTo(this.ship.x, this.ship.y + this.ship.height);
+	     this.context.lineTo(this.ship.x, this.ship.y);
+	     this.context.stroke();
+	     this.context.stroke();
+	     this.context.moveTo(0, 0);
+	     // draw the aliens
+	     for(i = 0; i < this.aliens.length; i++) {
+		 // rotate the current manta ray towards the player		 
+		 if(this.aliens[i].angle < 0) { // angles should always be positive
+		     this.aliens[i].angle += 2 * Math.PI;
+		 }
+		 if(this.aliens[i].state == 1) {
+		     var theta = this.calcAlienToShipTheta(i);
+		     this.aliens[i].v_x *= 1.00 - this.aliens[i].acceleration;
+		     this.aliens[i].v_y *= 1.00 - this.aliens[i].acceleration;
+		     if(theta > this.aliens[i].angle && theta - this.aliens[i].angle <= Math.PI) {
+			 this.aliens[i].angle += 0.01 * Math.PI;
+		     }
+		     else {
+			 this.aliens[i].angle -= 0.01 * Math.PI;
+		     }
+		     var speed_tolerance = 0.25; // an alien cannot dash while it is still decelerating
+		     if(Math.abs(theta - this.aliens[i].angle) <= 0.01 * Math.PI) {
+			 if(this.aliens[i].v_x < speed_tolerance && this.aliens[i].v_y < speed_tolerance) {
+			     this.aliens[i].state = 2;
+			     this.aliens[i].dash_frames = 0;
+			     // a dash is a static vector direction
+			     this.aliens[i].dash_x = Math.cos(this.aliens[i].angle - 0.5 * Math.PI); // 0.5 PI is b/c of the canvas coordinate system
+			     this.aliens[i].dash_y = Math.sin(this.aliens[i].angle - 0.5 * Math.PI); // the canvas's origin is at the top left corner
+			     this.aliens[i].dash_angle = this.aliens[i].angle;
+			 }
+		     }
+		 }
+		 else if(this.aliens[i].state == 2) {
+		     this.aliens[i].dash_frames++;
+		     this.aliens[i].v_x += this.aliens[i].acceleration * this.aliens[i].dash_x;
+		     this.aliens[i].v_y += this.aliens[i].acceleration * this.aliens[i].dash_y;
+		     // if they are moving way off then reset
+		     if(this.aliens[i].dash_frames % 25 == 0) {
+			 var theta = this.calcAlienToShipTheta(i);
+			 if(Math.abs(theta - this.aliens[i].dash_angle) > 0.25 * Math.PI) {
+			     this.aliens[i].state = 1;
+			     if(this.aliens[i].acceleration < 0.12) {
+				 this.aliens[i].acceleration *= 2.5; // the ray gets angrier the more you dodge it
+			     }
+			 }
+		     }
+		 }
+		 // This linked helped me figure out how to rotate the rays:
+		 // http://creativejs.com/2012/01/day-10-drawing-rotated-images-into-canvas/index.html
+		 this.context.save();
+		 this.context.translate(this.aliens[i].x, this.aliens[i].y);
+		 this.context.rotate(this.aliens[i].angle);
+		 if(this.aliens[i].swim_frame == 0)
+		     this.context.drawImage(this.ray_imgs[0], -this.ray_imgs[0].width/2, -this.ray_imgs[0].height/2);
+		 else if(this.aliens[i].swim_frame == 1 || this.aliens[i].swim_frame == 7)
+		     this.context.drawImage(this.ray_imgs[1], -this.ray_imgs[0].width/2, -this.ray_imgs[0].height/2);
+		 else if(this.aliens[i].swim_frame == 2 || this.aliens[i].swim_frame == 6)
+		     this.context.drawImage(this.ray_imgs[2], -this.ray_imgs[0].width/2, -this.ray_imgs[0].height/2);
+		 else if(this.aliens[i].swim_frame == 3 || this.aliens[i].swim_frame == 5)
+		     this.context.drawImage(this.ray_imgs[3], -this.ray_imgs[0].width/2, -this.ray_imgs[0].height/2);
+		 else
+		     this.context.drawImage(this.ray_imgs[4], -this.ray_imgs[0].width/2, -this.ray_imgs[0].height/2);
+		 // we refresh all of the alien pictures after 20 frames
+		 if(this.frame_number % 20 == 0) {
+		     this.aliens[i].swim_frame++;
+		     if(this.aliens[i].swim_frame > 7)
+			 this.aliens[i].swim_frame = 0;
+		 }
+		 this.context.restore();
+		 // draw the hitboxes here
+		 var x0, x1, y0, y1;
+		 x0 = this.aliens[i].x0;
+		 x1 = this.aliens[i].x1;
+		 y0 = this.aliens[i].y0;
+		 y1 = this.aliens[i].y1;
+		 this.context.strokeStyle = "#FF0000";
+		 this.context.beginPath();
+		 this.context.moveTo(x0, y0);
+		 this.context.lineTo(x1, y0);
+		 this.context.lineTo(x1, y1);
+		 this.context.lineTo(x0, y1);
+		 this.context.lineTo(x0, y0);
+		 this.context.stroke();
+		 this.context.stroke();
+		 this.context.moveTo(0, 0);
+	     }
+	     // draw the player's rockets
+	     for(i = 0; i < this.rockets.length; i++) {
+		 this.context.drawImage(this.rocket_img, this.rockets[i].x, this.rockets[i].y);
+		 x0 = this.rockets[i].x;
+		 x1 = this.rockets[i].x + this.rockets[i].width;
+		 y0 = this.rockets[i].y;
+		 y1 = this.rockets[i].y + this.rockets[i].height;
+		 this.context.strokeStyle = "#FFA500";
+		 this.context.beginPath();
+		 this.context.moveTo(x0, y0);
+		 this.context.lineTo(x1, y0);
+		 this.context.lineTo(x1, y1);
+		 this.context.lineTo(x0, y1);
+		 this.context.lineTo(x0, y0);
+		 this.context.stroke();
+		 this.context.stroke();
+		 this.context.moveTo(0, 0);
+		 this.rockets[i].y -= 15;
+		 if(this.rockets[i].y <= 0) {
+		     this.rockets.splice(i, 1);
+		 }
+	     }
+	     // draw explosions (for recently destroyed enemies)
+	     for(i = 0; i < this.explosions.length; i++) {
+		 this.context.save();
+		 this.context.translate(this.explosions[i].x, this.explosions[i].y);
+		 this.context.rotate(this.explosions[i].angle);
+		 this.context.drawImage(this.explosion_imgs[Math.floor(Math.random() * 4)], -this.explosion_imgs[0].width/2,
+				       -this.explosion_imgs[0].height/2);
+		 this.explosions[i].frames--;
+		 if(this.explosions[i].frames < 1) {
+		     this.explosions.splice(i, 1);
+		 }
+		 this.context.restore();
+	     }
+	     this.restockEnemies();
+	 }
+	 Game.prototype.intro = function() {
+	     if(this.aliens != undefined) {
+		 return;
+	     }
+	     var text, self = this, old_row = this.row;
+	     text = "Yours is the last gilded starfighter. ";
+	     text += "You must hold off the manta ray horde for as long as you can. ";
+	     text += "Mankind will remember your sacrifice. ";
+	     text += "Yet there remains a glimmer of hope for us all";
+	     text += ", that is if you possess the skill. ";
+	     text += "The cosmic anthropologists believe that if you destroy the Colossal "
+	     text += "Space Kraken then the manta ray swine will scatter. ";
+	     text += "Godspeed - Grand Emperor Terra";
+	     this.text_length = text.length;
+	     if(this.char_ndx >= text.length) { // takes precedence
+		 return;
+	     }
+	     if(text[this.char_ndx] == ' ')
+		 this.row = Math.floor(this.char_ndx / 50);
+	     if(this.char_ndx >= text.indexOf(" Godspeed")) {
+		 this.row = 10;
+	     }
+	     if(this.row != old_row)
+		 this.col = 0;
+	     else {
+		 this.context.fillText(text[this.char_ndx], 50 + 12 * this.col, 100 + 22 * this.row);
+		 this.col++;
+	     }
+	     setTimeout(function() {
+		 self.char_ndx++;
+		 self.intro();
+	     }, 0);
+	 }
+	 Game.prototype.prepIntro = function() {
+	     this.intro_is_playing = true;
+	     this.context.fillStyle = "red";
+	     this.context.textAlign = "left";
+	     this.context.font = "20px Monospace"
+	     this.col = 0;
+	     this.row = 0;
+	     this.char_ndx = 0;
+	 }
+	 function Game(context) {
+	     this.context = context;
+	     this.kill_count = 0;
+	     // this.context.font = "20px Monospace";
+	     // this.prepIntro();
+	     // this.intro();
+	     sleep(0).then(() => {
+		 console.log("continued");
+		 this.frame_number = 0;
+		 this.enemy_count = 0;
+		 this.game_over = false;
+		 this.ship = new Ship();
+		 this.rockets = [];
+		 this.aliens = [];
+		 this.restockEnemies();
+		 this.explosions = [];
+		 //imgs should not be held by the inner objects to save memory
+		 this.ship_img = new Image();
+		 this.rocket_img = new Image();
+		 this.alien_img = new Image();
+		 this.explosion_imgs = [new Image(), new Image(), new Image(), new Image()];
+		 this.ship_imgs = [new Image(), new Image(), new Image(), new Image(), new Image(), new Image(), new Image()]
+		 this.ray_imgs = [new Image(), new Image(), new Image(), new Image(), new Image(), new Image(), new Image(), new Image()];
+		 //I need to create an image bank class/function
+		 this.ship_img.src = "http://josephfguzman.com:8080/canvas_game/ship.png";
+		 this.rocket_img.src = "http://josephfguzman.com:8080/canvas_game/rocket.png";
+		 this.alien_img.src = "http://josephfguzman.com:8080/canvas_game/enemy0.png";
+		 this.explosion_imgs[0].src = "http://josephfguzman.com:8080/canvas_game/explosion0.png";
+		 this.explosion_imgs[1].src = "http://josephfguzman.com:8080/canvas_game/explosion1.png";
+		 this.explosion_imgs[2].src = "http://josephfguzman.com:8080/canvas_game/explosion2.png";
+		 this.explosion_imgs[3].src = "http://josephfguzman.com:8080/canvas_game/explosion3.png";
+		 this.ship_imgs[0].src = "http://josephfguzman.com:8080/canvas_game/ship0.png"
+		 this.ship_imgs[1].src = "http://josephfguzman.com:8080/canvas_game/ship1.png"
+		 this.ship_imgs[2].src = "http://josephfguzman.com:8080/canvas_game/ship2.png"
+		 this.ship_imgs[3].src = "http://josephfguzman.com:8080/canvas_game/ship3.png"
+		 this.ship_imgs[4].src = "http://josephfguzman.com:8080/canvas_game/ship4.png"
+		 this.ship_imgs[5].src = "http://josephfguzman.com:8080/canvas_game/ship5.png"
+		 this.ship_imgs[6].src = "http://josephfguzman.com:8080/canvas_game/ship6.png"
+		 this.ray_imgs[0].src = "http://josephfguzman.com:8080/canvas_game/ray0.png";
+		 this.ray_imgs[1].src = "http://josephfguzman.com:8080/canvas_game/ray1.png";
+		 this.ray_imgs[2].src = "http://josephfguzman.com:8080/canvas_game/ray2.png";
+		 this.ray_imgs[3].src = "http://josephfguzman.com:8080/canvas_game/ray3.png";
+		 this.ray_imgs[4].src = "http://josephfguzman.com:8080/canvas_game/ray4.png";
+		 this.ray_imgs[5].src = "http://josephfguzman.com:8080/canvas_game/ray3.png";
+		 this.ray_imgs[6].src = "http://josephfguzman.com:8080/canvas_game/ray2.png";
+		 this.ray_imgs[7].src = "http://josephfguzman.com:8080/canvas_game/ray1.png";
+		 this.enter_is_held = false;
+		 var self = this;
+		 this.spawnWave(0);
+		 setInterval(function() { self.redraw(); }, 10);
+	     });
+	 }
+	 context = document.getElementById("canvas").getContext("2d");
+	 //context.strokeStyle = "#00FF00";
+	 context.lineWidth = 0; // still has like the width of 4 pixels...
+	 g = new Game(context);
+	 $(document).ready(function() {
+	     $(document).keydown(function(e) {
+		 if (e.keyCode == '13') {
+		     // console.log("spacebar-down");
+		     if(!g.enter_is_held) {
+			 //we spawn a rocket at the current location of the ship
+			 g.rockets.push(new Rocket(g.ship.x + 20, g.ship.y - 10));
+			 g.enter_is_held = true;
+		     }
+		 }
+		 else if(e.keyCode == '65') { // A
+		     g.ship.v_x = -5; 
+		 }
+		 else if(e.keyCode == '87') { //S
+		     g.ship.v_y = -5;
+		 }
+		 else if(e.keyCode == '83') { // W
+		     g.ship.v_y = 5;
+		 }		 
+		 else if(e.keyCode == '68') { // D
+		     g.ship.v_x = 5;
+		 }
+	     });
+	     $(document).keyup(function(e) {
+		 if (e.keyCode == '13') {
+		     // console.log("spacebar-up");
+		     g.enter_is_held = false;
+		     // console.log("g.rockets.length = " + g.rockets.length);
+		 }
+		 else if(e.keyCode == '65') { // A
+		     if(g.ship.v_x < 0) {
+			 g.ship.v_x = 0;
+		     }
+		 }
+		 else if(e.keyCode == '83') { // S
+		     g.ship.v_y = 0;
+		 }
+		 else if(e.keyCode == '87') { // W
+		     g.ship.v_y = 0;
+		 }
+		 else if(e.keyCode == '68') { // D
+		     if(g.ship.v_x > 0) {
+			 g.ship.v_x = 0;
+		     }
+		 }
+	     });
+	     $(".up-button").mousedown(function(event) {
+		 event.preventDefault();
+		 g.ship.v_x = 0;
+		 g.ship.v_y = -5;
+	     });
+	     $(".down-button").mousedown(function(event) {
+		 event.preventDefault();
+		 g.ship.v_x = 0;
+		 g.ship.v_y = 5;
+	     });
+	     $(".left-button").mousedown(function(event) {
+		 event.preventDefault();
+		 g.ship.v_y = 0;
+		 g.ship.v_x = -5;
+	     });
+	     $(".right-button").mousedown(function(event) {
+		 event.preventDefault();
+		 g.ship.v_y = 0;
+		 g.ship.v_x = 5;
+	     });
+	     $("#fire-button").mousedown(function(event) {
+		 event.preventDefault();
+		 g.rockets.push(new Rocket(g.ship.x + 20, g.ship.y - 10));
+	     });
+	 });
+	</script>
+	<!-- <div class="controls">
+	     <button class="up-button">Up</button><br/>
+	     <div class="arrows">
+	     <div>
+	     <button class="left-button">Left</button>
+	     <button class="down-button">Down</button>
+	     <button class="right-button">Right</button>
+	     <button id="fire-button">Fire</button>
+	     </div>
+	     </div>
+	     </div> -->
+	<p>
+	    Work In Progress
+	</p>
+	<p>
+	    Does Not Work On Mobile
+	</p>
+    </body>
+</html>
