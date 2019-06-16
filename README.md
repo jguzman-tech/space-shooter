@@ -13,9 +13,13 @@ users).
 ## Gameplay
 
 W - Move Up
+
 A - Move Left
+
 S - Move Down
+
 D - Move Right
+
 Enter - Fire
 
 The alien waves keep increase as the game moves on until it reaches a rate of 10
