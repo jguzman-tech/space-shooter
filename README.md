@@ -30,4 +30,4 @@ can also destroy the aliens so you can use them for cover.
 The game ends when you die but make sure to take as many of those alien bastards
 down as you can. :rage2:
 
-[![Watch the gif](https://raw.githubusercontent.com/leetcoder0/space-shooter/master/gameplay.gif](https://raw.githubusercontent.com/leetcoder0/space-shooter/master/gameplay.gif)
+![Game Demo](https://raw.githubusercontent.com/leetcoder0/space-shooter/master/gameplay.gif)
