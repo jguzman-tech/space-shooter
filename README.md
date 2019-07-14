@@ -24,8 +24,8 @@ Enter - Fire
 
 The alien waves keep increase as the game moves on until it reaches a rate of 10
 per second. The aliens themselves will speed up the more you dodge them so it's
-best to destroy them right away. The asteroids will spawn in randomly but you
-can also destroy the aliens so you can use them for cover. 
+best to destroy them right away. The asteroids will spawn in randomly but they
+will also destroy the aliens so you can use them for cover. 
 
 The game ends when you die but make sure to take as many of those alien bastards
 down as you can. :rage2:
