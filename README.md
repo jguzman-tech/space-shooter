@@ -27,7 +27,9 @@ per second. The aliens themselves will speed up the more you dodge them so it's
 best to destroy them right away. The asteroids will spawn in randomly but they
 will also destroy the aliens so you can use them for cover. 
 
-The game ends when you die but make sure to take as many of those alien bastards
+The game ends when you die but make sure to take as many of those evil manta rays
 down as you can. :rage2:
 
 ![Game Demo](https://raw.githubusercontent.com/leetcoder0/space-shooter/master/gameplay.gif)
+
+This game is also hosted on my website: https://josephfguzman.com:8080/
