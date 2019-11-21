@@ -1,5 +1,7 @@
 # space-shooter
 
+This game is also hosted on my website: http://josephfguzman.com:8080/
+
 This is a simple 2D shooter that I made using JavaScript and HTML. I created the
 images myself using pixilart.com while the audio files were taken from several
 users on freesound.org. The background was taken from: https://images.unsplash.com/photo-1518066000714-58c45f1a2c0a?ixlib=rb-1.2.1&w=1000&q=80
@@ -31,5 +33,3 @@ The game ends when you die but make sure to take as many of those evil manta ray
 down as you can. :rage2:
 
 ![Game Demo](https://raw.githubusercontent.com/leetcoder0/space-shooter/master/gameplay.gif)
-
-This game is also hosted on my website: https://josephfguzman.com:8080/
