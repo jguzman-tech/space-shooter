@@ -2,6 +2,8 @@
 
 This game is also hosted on my website: http://josephfguzman.com:8080/
 
+Edit: My website is temporarily down because I am currently moving.
+
 This is a simple 2D shooter that I made using JavaScript and HTML. I created the
 images myself using pixilart.com while the audio files were taken from several
 users on freesound.org. The background was taken from: https://images.unsplash.com/photo-1518066000714-58c45f1a2c0a?ixlib=rb-1.2.1&w=1000&q=80
