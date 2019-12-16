@@ -33,5 +33,3 @@ The game ends when you die but make sure to take as many of those evil manta ray
 down as you can. :rage2:
 
 ![Game Demo](https://raw.githubusercontent.com/leetcoder0/space-shooter/master/gameplay.gif)
-
-a
