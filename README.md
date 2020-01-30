@@ -34,4 +34,3 @@ down as you can. :rage2:
 
 ![Game Demo](https://raw.githubusercontent.com/leetcoder0/space-shooter/master/gameplay.gif)
 
-small change
